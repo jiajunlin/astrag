@@ -1283,6 +1283,8 @@ The default retrieval engine remains lexical because it provides:
 
 # Design decisions
 
+AST-RAG is designed to balance semantic retrieval with structural code intelligence. These design choices explain why the system is built around graphs, signatures, and compression instead of relying on raw embedding similarity alone.
+
 ## Why not only use embeddings?
 
 Embeddings understand concepts well but often miss:
@@ -1310,7 +1312,7 @@ Metadata is cheaper and often more useful.
 
 Because software is connected.
 
-A function's importance depends not only on its text, but also:
+A function's importance depends not only on its text, but also on:
 
 - who calls it;
 - what it calls;
