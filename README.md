@@ -1282,164 +1282,153 @@ The default retrieval engine remains lexical because it provides:
 ---
 
 # Design decisions
-Why not only use embeddings?
+
+## Why not only use embeddings?
 
 Embeddings understand concepts well but often miss:
 
-exact symbols;
-API names;
-function variants;
-dependency relationships.
+- exact symbols;
+- API names;
+- function variants;
+- dependency relationships.
 
 Code retrieval requires both semantic and structural understanding.
 
-Why retrieve signatures first?
+## Why retrieve signatures first?
 
 Most coding tasks begin with questions like:
 
-"Does this already exist?"
-"Where is authentication handled?"
-"Which class owns this behavior?"
+- "Does this already exist?"
+- "Where is authentication handled?"
+- "Which class owns this behavior?"
 
 The answer is usually not inside the function body.
 
 Metadata is cheaper and often more useful.
 
-Why build a graph?
+## Why build a graph?
 
 Because software is connected.
 
 A function's importance depends not only on its text, but also:
 
-who calls it;
-what it calls;
-where it sits architecturally.
-Why compress instead of truncate?
+- who calls it;
+- what it calls;
+- where it sits architecturally.
+
+## Why compress instead of truncate?
 
 Simple truncation destroys important information.
 
 Example:
 
+```python
 def authenticate_user():
     ...
     verify_token()
     ...
+```
 
 A truncated context may remove the actual dependency.
 
 Semantic compression attempts to preserve meaning while reducing size.
 
-Benchmarks
+---
+
+# Benchmarks
 
 AST-RAG measures performance using several dimensions.
 
-Metric	Description
-Retrieval precision	How often returned symbols are relevant
-Replication accuracy	Ability to find existing implementations
-Context efficiency	Useful information per token
-Graph accuracy	Correctness of dependency edges
-Indexing speed	Repository processing time
-Expected improvements over flat RAG
+| Metric               | Description                                           |
+|----------------------|-------------------------------------------------------|
+| Retrieval precision   | How often returned symbols are relevant               |
+| Replication accuracy | Ability to find existing implementations              |
+| Context efficiency   | Useful information per token                          |
+| Graph accuracy       | Correctness of dependency edges                       |
+| Indexing speed       | Repository processing time                            |
 
-Compared with traditional chunk retrieval:
+## Comparison with flat RAG
 
-Capability	Flat RAG	AST-RAG
-Function awareness	Limited	Native
-Call graph	No	Yes
-Lazy source loading	No	Yes
-Existing-code detection	Weak	Built-in
-Token optimization	Basic truncation	Semantic compression
-Offline operation	Depends	Default
-Multi-language support	Variable	Built-in
-Limitations
+| Capability              | Flat RAG          | AST-RAG              |
+|------------------------|-------------------|----------------------|
+| Function awareness      | Limited           | Native               |
+| Call graph              | No                | Yes                  |
+| Lazy source loading     | No                | Yes                  |
+| Existing-code detection | Weak              | Built-in             |
+| Token optimization      | Basic truncation  | Semantic compression |
+| Offline operation       | Depends           | Default              |
+| Multi-language support  | Variable          | Built-in             |
+
+---
+
+# Limitations
 
 AST-RAG intentionally focuses on retrieval intelligence rather than full compilation.
 
-Current limitations:
+## Dynamic languages
 
-Dynamic languages
+Highly dynamic behavior may be difficult to resolve, such as:
 
-Highly dynamic behavior may be difficult to resolve:
+- `getattr(obj, name)()`
 
-getattr(obj, name)()
-Runtime-generated code
+## Runtime-generated code
 
 Generated code may not exist during indexing.
 
 Examples:
 
-ORM-generated methods;
-metaprogramming;
-runtime decorators.
-Extremely large monorepos
+- ORM-generated methods
+- metaprogramming
+- runtime decorators
+
+## Extremely large monorepos
 
 Very large repositories may require:
 
-distributed indexing;
-remote caches;
-incremental deployment.
-Language completeness
+- distributed indexing
+- remote caches
+- incremental deployment
+
+## Language completeness
 
 Structural extraction is prioritized over complete language semantics.
 
 The system aims to answer:
 
-"Where is the code I need?"
+- "Where is the code I need?"
 
 rather than:
 
-"Can this compiler prove this program correct?"
+- "Can this compiler prove this program correct?"
 
-Repository layout
-astrag/
+---
 
-├── parsing.py
-│   Source parsing and AST extraction
-│
-├── graph.py
-│   Symbol graph construction
-│
-├── retrieval.py
-│   Hybrid retrieval algorithms
-│
-├── tools.py
-│   Agent-facing tools
-│
-├── langs.py
-│   Language configuration
-│
-├── universal.py
-│   Generic language support
-│
-├── slicing.py
-│   Backward dependency analysis
-│
-├── compression.py
-│   Semantic-anchor compression
-│
-├── pipeline.py
-│   End-to-end orchestration
-│
-├── mcp_server.py
-│   MCP integration
-│
-└── __main__.py
-    CLI entry point
-Demo projects
-demo/
+# Repository layout
 
-├── sample_repo/
-│
-├── polyglot_repo/
-│
-├── babel_repo/
-│
-├── run_demo.py
-│
-├── run_polyglot.py
-│
-└── run_babel.py
-Philosophy
+## astrag/
+
+- `parsing.py` — Source parsing and AST extraction
+- `graph.py` — Symbol graph construction
+- `retrieval.py` — Hybrid retrieval algorithms
+- `tools.py` — Agent-facing tools
+- `langs.py` — Language configuration
+- `universal.py` — Generic language support
+- `slicing.py` — Backward dependency analysis
+- `compression.py` — Semantic-anchor compression
+- `pipeline.py` — End-to-end orchestration
+- `mcp_server.py` — MCP integration
+- `__main__.py` — CLI entry point
+
+## Demo projects
+
+- `demo/sample_repo/`
+- `demo/polyglot_repo/`
+- `demo/babel_repo/`
+- `demo/run_demo.py`
+- `demo/run_polyglot.py`
+- `demo/run_babel.py`
+
+## Philosophy
 
 AST-RAG is built around a simple idea:
 
@@ -1449,154 +1438,20 @@ Better code agents require more than similarity search.
 
 They need:
 
-structure;
-memory;
-relationships;
-reuse detection;
-efficient context management.
+- structure
+- memory
+- relationships
+- reuse detection
+- efficient context management
 
 AST-RAG provides that missing layer between a repository and an AI coding agent.
 
-License
+## License
 
 AST-RAG is released under the MIT License.
 
-See:
+See `LICENSE` for details.
 
-LICENSE
-
-for details.
-
-
-1. Embed entire files.
-2. Retrieve chunks using similarity search.
-
-Both approaches work for small repositories, but both begin to fail as codebases grow.
-
-Large repositories introduce several problems:
-
-- files become too large for context windows;
-- related code becomes scattered across modules;
-- utility functions become difficult to discover;
-- duplicate implementations appear;
-- boilerplate consumes context space;
-- retrieval quality decreases as repositories scale.
-
-AST-RAG was designed to solve these problems.
-
-Instead of treating source code as plain text, AST-RAG treats a repository as a structured system composed of:
-
-- functions;
-- methods;
-- classes;
-- imports;
-- call relationships;
-- documentation;
-- metadata.
-
-The system retrieves only the information needed for the current task while preserving architectural context.
-
----
-
-# Core Principles
-
-## 1. Structure matters
-
-Code is not natural language.
-
-A 500-line file is not a single document.
-
-Functions, classes, imports, decorators, and call relationships all contain meaning.
-
-AST-RAG preserves these structures during indexing.
-
----
-
-## 2. Metadata is cheap
-
-Most coding tasks do not require entire implementations.
-
-Often the useful information is:
-
-- function signatures;
-- docstrings;
-- imports;
-- locations;
-- callers;
-- callees.
-
-Source bodies are loaded only when required.
-
----
-
-## 3. Graphs provide context
-
-Code is connected.
-
-Example:
-
-
-authenticate_user()
-
-    |
-
-    v
-
-load_session()
-
-    |
-
-    v
-
-fetch_permissions()
-
-    |
-
-    v
-
-build_context()
-
-
-AST-RAG models these relationships directly.
-
----
-
-## 4. Compression is essential
-
-Large language models do not need every line.
-
-AST-RAG removes low-value information while preserving semantic meaning.
-
----
-
-## 5. Existing code should be reused
-
-Before creating new code, AST-RAG searches for existing implementations.
-
-The cheapest implementation is usually the one that already exists.
-
----
-
-# Architecture
-
-AST-RAG consists of three primary layers.
-
-
-Repository
-
- |
-
- v
-
-+----------------+
-| Parsing Layer |
-+----------------+
-
- |
-
- v
-
-Code Graph
 
  |
 
@@ -2125,15 +1980,10 @@ Rust frameworks
 Creates connections:
 
 Frontend
-
  |
-
  v
-
 API Route
-
  |
-
  v
 
 Backend Handler
@@ -2143,7 +1993,6 @@ Why not embeddings only?
 Embeddings understand concepts.
 
 They often miss:
-
 exact symbols;
 APIs;
 dependency relationships.
