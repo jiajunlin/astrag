@@ -7,7 +7,7 @@
 *Structure-aware indexing, graph-based retrieval, lazy loading, and semantic compression for code agents.*
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]()
-[![License](https://img.shields.io/badge/license-MIT-green.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Offline](https://img.shields.io/badge/dependencies-none-success.svg)]()
 
 </div>
