@@ -1451,32 +1451,3 @@ AST-RAG provides that missing layer between a repository and an AI coding agent.
 AST-RAG is released under the MIT License.
 
 See `LICENSE` for details.
-
-
- |
-
- v
-
-+----------------+
-| Retrieval |
-+----------------+
-
- |
-
- v
-
-Relevant Symbols
-
- |
-
- v
-
-+----------------+
-| Compression |
-+----------------+
-
- |
-
- v
-
-Optimized Context
