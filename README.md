@@ -908,26 +908,28 @@ At the end of the pipeline, AST-RAG produces a context block that is:
 - deterministic;
 - optimized for code generation.
 
+---
 
-Universal language engine
+# Universal language engine
 
 AST-RAG is designed to operate across many programming languages.
 
 The goal is not to create a perfect compiler front-end for every language.
-
 The goal is to extract the structural information required for retrieval:
 
-symbols;
-definitions;
-calls;
-imports;
-documentation;
-source locations;
-relationships.
+- symbols;
+- definitions;
+- calls;
+- imports;
+- documentation;
+- source locations;
+- relationships.
 
 Languages are therefore supported through a tiered parser architecture.
 
-Parser architecture
+## Parser architecture
+
+```text
                  Source file
                      │
                      ▼
@@ -945,288 +947,258 @@ Parser architecture
                      │
                      ▼
              Universal code graph
-Tier 1 — Native AST support
+```
+
+### Tier 1 — Native AST support
 
 Languages with dedicated parsers receive the highest level of extraction.
 
 Supported:
 
-Python
-Tree-sitter powered languages
+- Python
+- Tree-sitter powered languages
 
-Python uses the built-in:
-
-ast
-
-module whenever possible.
+Python uses the built-in `ast` module whenever possible.
 
 This provides:
 
-exact syntax trees;
-reliable symbol boundaries;
-accurate function extraction;
-precise source locations.
-Tier 2 — Brace-based languages
+- exact syntax trees;
+- reliable symbol boundaries;
+- accurate function extraction;
+- precise source locations.
 
-Languages using {} block structures are processed through Tree-sitter grammars.
+### Tier 2 — Brace-based languages
+
+Languages using `{}` block structures are processed through Tree-sitter grammars.
 
 Supported:
 
-Language	Extensions
-C	.c
-C++	.cpp, .hpp
-C#	.cs
-Java	.java
-JavaScript	.js
-TypeScript	.ts, .tsx
-Go	.go
-Rust	.rs
-PHP	.php
-Swift	.swift
-Kotlin	.kt
-Scala	.scala
-Dart	.dart
-Objective-C	.m, .mm
-CUDA	.cu
-Zig	.zig
-Groovy	.groovy
-Perl	.pl
-PowerShell	.ps1
-R	.r
-Solidity	.sol
-D	.d
-Protobuf	.proto
-GraphQL	.graphql
-Terraform	.tf
-Tier 3 — End-block languages
+| Language      | Extensions       |
+|--------------|------------------|
+| C            | `.c`             |
+| C++          | `.cpp`, `.hpp`   |
+| C#           | `.cs`            |
+| Java         | `.java`          |
+| JavaScript   | `.js`            |
+| TypeScript   | `.ts`, `.tsx`    |
+| Go           | `.go`            |
+| Rust         | `.rs`            |
+| PHP          | `.php`           |
+| Swift        | `.swift`         |
+| Kotlin       | `.kt`            |
+| Scala        | `.scala`         |
+| Dart         | `.dart`          |
+| Objective-C  | `.m`, `.mm`      |
+| CUDA         | `.cu`            |
+| Zig          | `.zig`           |
+| Groovy       | `.groovy`        |
+| Perl         | `.pl`            |
+| PowerShell   | `.ps1`           |
+| R            | `.r`             |
+| Solidity     | `.sol`           |
+| D            | `.d`             |
+| Protobuf     | `.proto`         |
+| GraphQL      | `.graphql`       |
+| Terraform    | `.tf`            |
+
+### Tier 3 — End-block languages
 
 Languages that use keywords instead of braces are handled with specialized structural extraction.
 
 Supported:
 
-Ruby
-Lua
-Elixir
-Julia
-Crystal
-Visual Basic
-MATLAB
-Fortran
-Fish shell
+- Ruby
+- Lua
+- Elixir
+- Julia
+- Crystal
+- Visual Basic
+- MATLAB
+- Fortran
+- Fish shell
 
 Extraction focuses on:
 
-functions;
-modules;
-classes;
-blocks;
-references.
-Tier 4 — Structured formats
+- functions;
+- modules;
+- classes;
+- blocks;
+- references.
+
+### Tier 4 — Structured formats
 
 AST-RAG also understands configuration and markup-heavy repositories.
 
 Supported:
 
-Build systems
-Makefiles
-CMake
-Dockerfiles
-Data formats
-JSON
-YAML
-TOML
-INI
-Documentation
-Markdown
-LaTeX
-Web formats
-HTML
-XML
-SVG
-CSS
-Framework templates
-Vue
-Svelte
-Astro
-ERB
-EJS
-Handlebars
-Jinja
-Liquid
-Twig
-Nunjucks
-Tier 5 — Generic fallback
+- Build systems
+- Makefiles
+- CMake
+- Dockerfiles
+- JSON
+- YAML
+- TOML
+- INI
+- Markdown
+- LaTeX
+- HTML
+- XML
+- SVG
+- CSS
+- Vue
+- Svelte
+- Astro
+- ERB
+- EJS
+- Handlebars
+- Jinja
+- Liquid
+- Twig
+- Nunjucks
+
+### Tier 5 — Generic fallback
 
 Unknown file types are not ignored.
 
 Instead, AST-RAG applies a fallback parser that extracts:
 
-file metadata;
-symbols;
-probable definitions;
-references;
-searchable content.
+- file metadata;
+- symbols;
+- probable definitions;
+- references;
+- searchable content.
 
-This allows mixed repositories containing:
+This allows mixed repositories containing scripts, generated files, proprietary formats, and configuration files to remain searchable.
 
-scripts;
-generated files;
-proprietary formats;
-configuration files;
+---
 
-to remain searchable.
-
-Tool integrations
+# # Tool integrations
 
 AST-RAG is designed to work as a backend memory layer for coding agents.
 
 Supported integrations include:
 
-Anthropic tool use;
-Model Context Protocol (MCP);
-IBM Bob workflows.
-Anthropic Messages API
+- Anthropic tool use
+- Model Context Protocol (MCP)
+- IBM Bob workflows
+
+## Anthropic Messages API
 
 AST-RAG exposes tools that can be registered directly with Anthropic models.
 
 Example:
 
+```python
 tools = CodebaseTools.anthropic_tool_schemas()
+```
 
 Available operations:
 
-search_code
-find_existing_implementations
-get_function_body
-get_callees
-get_callers
-build_context
+- `search_code`
+- `find_existing_implementations`
+- `get_function_body`
+- `get_callees`
+- `get_callers`
+- `build_context`
 
 A typical agent workflow:
 
+```text
 User request
-
      │
-
      ▼
-
 AST-RAG builds context
-
      │
-
      ▼
-
 Agent receives:
-
 - relevant symbols
 - architecture context
 - replication warnings
-
      │
-
      ▼
-
 Agent requests exact source
-
      │
-
      ▼
-
 AST-RAG returns implementation
-
      │
-
      ▼
-
 Agent writes code
-Model Context Protocol (MCP)
+```
+
+## Model Context Protocol (MCP)
 
 AST-RAG includes an MCP server.
 
 Start it with:
 
+```bash
 python3 -m astrag mcp /path/to/project
+```
 
 The server exposes repository intelligence as tools.
 
-MCP tools
-search_code
+### MCP tools
 
-Search repository symbols.
+- `search_code` — search repository symbols.
+- `find_existing_implementations` — search for reusable functionality.
+- `get_function_body` — retrieve exact source.
+- `get_callers` — find incoming dependencies.
+- `get_callees` — find downstream dependencies.
+- `build_context` — generate an optimized prompt context.
 
-Example:
+Examples:
 
-{
-  "query": "authentication middleware"
-}
-find_existing_implementations
+```json
+{ "query": "authentication middleware" }
+```
 
-Search for reusable functionality.
+```json
+{ "task": "retry failed HTTP requests" }
+```
 
-Example:
+```json
+{ "chunk_id": "client.py::retry_request" }
+```
 
-{
-  "task": "retry failed HTTP requests"
-}
-get_function_body
+```json
+{ "symbol": "charge_card" }
+```
 
-Retrieve exact source.
+```json
+{ "symbol": "process_payment" }
+```
 
-Example:
+```json
+{ "task": "add caching to user lookup", "budget": 2000 }
+```
 
-{
-  "chunk_id": "client.py::retry_request"
-}
-get_callers
-
-Find incoming dependencies.
-
-Example:
-
-{
-  "symbol": "charge_card"
-}
-get_callees
-
-Find downstream dependencies.
-
-Example:
-
-{
-  "symbol": "process_payment"
-}
-build_context
-
-Generate an optimized prompt context.
-
-Example:
-
-{
-  "task": "add caching to user lookup",
-  "budget": 2000
-}
-IBM Bob integration
+## IBM Bob integration
 
 AST-RAG can initialize IBM Bob project configuration.
 
 Run:
 
+```bash
 python3 -m astrag bob-init /path/to/project
+```
 
 Generated structure:
 
+```
 .bob/
 ├── mcp.json
 └── rules/
     └── astrag-replication-check.md
+```
 
 The generated rules automatically enforce:
 
-reuse before rewriting;
-repository inspection;
-API discovery;
-tool-based source retrieval.
-Incremental indexing
+- reuse before rewriting;
+- repository inspection;
+- API discovery;
+- tool-based source retrieval.
+
+## Incremental indexing
 
 Large repositories should not require complete re-indexing.
 
@@ -1234,94 +1206,82 @@ AST-RAG supports incremental caching.
 
 Enable:
 
+```bash
 python3 -m astrag index \
     ./repo \
     --cache repository.db
+```
 
 The cache tracks:
 
-(file path,
- modification time,
- size,
- content hash)
+- file path
+- modification time
+- size
+- content hash
 
 Unchanged files are reused.
-
 Changed files are reparsed.
-
 Deleted files are automatically removed.
 
-Cross-language API tracing
+## Cross-language API tracing
 
 Modern applications frequently split logic across languages.
 
 Example:
 
+```text
 React frontend
-
        │
-
        ▼
-
 /api/payment
-
        │
-
        ▼
-
 Python backend
-
        │
-
        ▼
-
 PaymentService
+```
 
 AST-RAG can trace these relationships.
 
 Enable:
 
+```bash
 --trace-api
+```
 
 Supported patterns include:
 
-Frontend:
-
-fetch
-axios
-XMLHttpRequest
-
-Backend:
-
-Flask
-FastAPI
-Express
-Spring
-Go HTTP
-Rust web frameworks
+- Frontend: `fetch`, `axios`, `XMLHttpRequest`
+- Backend: `Flask`, `FastAPI`, `Express`, `Spring`, `Go HTTP`, `Rust web frameworks`
 
 The system matches literal routes and builds cross-language edges.
 
-Dense embeddings
+## Dense embeddings
 
 Dense retrieval is optional.
 
 Enable:
 
+```bash
 --dense
+```
 
 The system can use:
 
-sentence-transformers;
-custom embedding functions;
-local embedding models.
+- `sentence-transformers`
+- custom embedding functions
+- local embedding models
 
 The default retrieval engine remains lexical because it provides:
 
-offline operation;
-reproducibility;
-zero infrastructure requirements.
-Design decisions
+- offline operation;
+- reproducibility;
+- zero infrastructure requirements.
+
+---
+
+# Design decisions
 Why not only use embeddings?
 
 Embeddings understand concepts well but often miss:
@@ -1507,44 +1467,6 @@ LICENSE
 
 for details.
 
-Final README complete
-
-The rewritten README now covers:
-
-✅ project introduction
-✅ architecture
-✅ retrieval algorithms
-✅ graph reasoning
-✅ replication checks
-✅ semantic compression
-✅ language engine
-✅ integrations
-✅ benchmarks
-✅ design decisions
-✅ limitations
-✅ repository structure
-
-This version is structured more like a serious open-source research project README rather than a feature list, while preserving the technical ideas from the original.
-
-Ad
-Ads do not influence the answers you get from ChatGPT. Your chats stay private. 
-Learn about ads and personalization
-turn it to a md file for me to copy and paste
-
-Here is the complete Markdown file content. Copy everything inside the block into a file named:
-
-README.md
-# ast-rag
-
-## AST-based Retrieval-Augmented Generation for Large Codebases
-
-**Structure-aware indexing, graph-based retrieval, lazy loading, and semantic compression for code agents.**
-
----
-
-## Why AST-RAG exists
-
-Modern coding agents usually operate in one of two ways:
 
 1. Embed entire files.
 2. Retrieve chunks using similarity search.
@@ -2318,10 +2240,3 @@ AST-RAG provides that layer between software repositories and AI agents.
 
 License
 
-MIT License
-
-See:
-
-LICENSE
-
-This is now a clean standalone `README.md` you can paste directly into GitHub.
