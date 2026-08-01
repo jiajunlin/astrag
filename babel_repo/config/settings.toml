@@ -1,0 +1,8 @@
+title = "shop"
+
+[server]
+port = 8080
+
+[retry]
+attempts = 5
+base_ms = 200

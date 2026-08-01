@@ -1,0 +1,42 @@
+[
+  {
+    "query": "retry a function call with exponential backoff",
+    "relevant": ["utils/retry.py::retry_with_backoff"]
+  },
+  {
+    "query": "charge a credit card payment",
+    "relevant": ["services/payments.py::charge_card"]
+  },
+  {
+    "query": "validate a credit card number checksum",
+    "relevant": ["services/payments.py::luhn_checksum_ok"]
+  },
+  {
+    "query": "create a new user account",
+    "relevant": ["services/users.py::UserService.create_user"]
+  },
+  {
+    "query": "look up a user by id",
+    "relevant": ["services/users.py::UserService.get_user"]
+  },
+  {
+    "query": "make an HTTP GET request with a base url",
+    "relevant": ["utils/http.py::HttpClient.get"]
+  },
+  {
+    "query": "fetch JSON from a URL with retries",
+    "relevant": ["utils/http.py::fetch_json"]
+  },
+  {
+    "query": "turn a string into a url-safe slug",
+    "relevant": ["utils/text.py::slugify"]
+  },
+  {
+    "query": "shorten text to a maximum number of words",
+    "relevant": ["utils/text.py::truncate_words"]
+  },
+  {
+    "query": "custom exception for invalid user input",
+    "relevant": ["services/users.py::ValidationError"]
+  }
+]

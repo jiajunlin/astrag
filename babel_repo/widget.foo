@@ -1,0 +1,12 @@
+// A made-up language nobody has heard of.
+
+// Draw a widget onto the canvas.
+fn draw_widget(canvas, w) {
+    let frame = compute_frame(w);
+    canvas.rect(frame);
+}
+
+struct Widget {
+    width: 10
+    height: 20
+}

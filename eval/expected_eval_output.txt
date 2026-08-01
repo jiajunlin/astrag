@@ -1,0 +1,35 @@
+  ✓  'retry a function call with exponential backoff'
+        expected: ['utils/retry.py::retry_with_backoff']
+        top hit:  'utils/retry.py::retry_with_backoff'  (rank of first relevant: 1)
+  ✓  'charge a credit card payment'
+        expected: ['services/payments.py::charge_card']
+        top hit:  'services/payments.py::charge_card'  (rank of first relevant: 1)
+  ✓  'validate a credit card number checksum'
+        expected: ['services/payments.py::luhn_checksum_ok']
+        top hit:  'services/payments.py::luhn_checksum_ok'  (rank of first relevant: 1)
+  ✓  'create a new user account'
+        expected: ['services/users.py::UserService.create_user']
+        top hit:  'services/users.py::UserService.create_user'  (rank of first relevant: 1)
+  ✓  'look up a user by id'
+        expected: ['services/users.py::UserService.get_user']
+        top hit:  'services/users.py::UserService.get_user'  (rank of first relevant: 1)
+  ✓  'make an HTTP GET request with a base url'
+        expected: ['utils/http.py::HttpClient.get']
+        top hit:  'utils/http.py::HttpClient.get'  (rank of first relevant: 1)
+  ✓  'fetch JSON from a URL with retries'
+        expected: ['utils/http.py::fetch_json']
+        top hit:  'utils/http.py::fetch_json'  (rank of first relevant: 1)
+  ✓  'turn a string into a url-safe slug'
+        expected: ['utils/text.py::slugify']
+        top hit:  'utils/http.py::fetch_json'  (rank of first relevant: 5)
+  ✓  'shorten text to a maximum number of words'
+        expected: ['utils/text.py::truncate_words']
+        top hit:  'services/payments.py::luhn_checksum_ok'  (rank of first relevant: 4)
+  ✓  'custom exception for invalid user input'
+        expected: ['services/users.py::ValidationError']
+        top hit:  'services/users.py::ValidationError'  (rank of first relevant: 1)
+
+queries        : 10
+hit-rate@5    : 1.00  (10/10)
+MRR            : 0.845
+precision@1    : 0.80  (8/10)

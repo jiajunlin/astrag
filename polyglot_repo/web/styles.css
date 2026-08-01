@@ -1,0 +1,22 @@
+:root {
+  --accent: #6046ff;
+  --bg: #ffffff;
+}
+
+.cart-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+#page-footer {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .cart-item {
+    flex-direction: column;
+  }
+}
