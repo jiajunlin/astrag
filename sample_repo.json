@@ -1,0 +1,367 @@
+{
+ "version": 1,
+ "root": "C:\\Users\\jlin7\\Downloads\\files\\ast-rag\\demo\\sample_repo",
+ "trace_api_calls": false,
+ "chunks": [
+  {
+   "chunk_id": "services/payments.py::PaymentError",
+   "kind": "class",
+   "name": "PaymentError",
+   "qualname": "PaymentError",
+   "file": "services/payments.py",
+   "start_line": 5,
+   "end_line": 6,
+   "signature": "class PaymentError(Exception):",
+   "docstring": "Raised when a charge is rejected before it reaches the API.",
+   "source": "class PaymentError(Exception):\n    \"\"\"Raised when a charge is rejected before it reaches the API.\"\"\"",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "utils.http.HttpClient"
+   ]
+  },
+  {
+   "chunk_id": "services/payments.py::luhn_checksum_ok",
+   "kind": "function",
+   "name": "luhn_checksum_ok",
+   "qualname": "luhn_checksum_ok",
+   "file": "services/payments.py",
+   "start_line": 9,
+   "end_line": 21,
+   "signature": "def luhn_checksum_ok(card_number):",
+   "docstring": "Return True if `card_number` passes the Luhn check.",
+   "source": "def luhn_checksum_ok(card_number):\n    \"\"\"Return True if `card_number` passes the Luhn check.\"\"\"\n    digits = [int(d) for d in str(card_number) if d.isdigit()]\n    if len(digits) < 12:\n        return False\n    total = 0\n    for i, d in enumerate(reversed(digits)):\n        if i % 2 == 1:\n            d *= 2\n            if d > 9:\n                d -= 9\n        total += d\n    return total % 10 == 0",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "enumerate",
+    "int",
+    "len",
+    "reversed",
+    "str",
+    "d.isdigit"
+   ],
+   "imports": [
+    "utils.http.HttpClient"
+   ]
+  },
+  {
+   "chunk_id": "services/payments.py::charge_card",
+   "kind": "function",
+   "name": "charge_card",
+   "qualname": "charge_card",
+   "file": "services/payments.py",
+   "start_line": 24,
+   "end_line": 33,
+   "signature": "def charge_card(client: HttpClient, card_number, amount_cents):",
+   "docstring": "Charge a card through the payments API.\n\nNOTE: no retry handling yet \u2014 transient 5xx errors bubble up.",
+   "source": "def charge_card(client: HttpClient, card_number, amount_cents):\n    \"\"\"Charge a card through the payments API.\n\n    NOTE: no retry handling yet \u2014 transient 5xx errors bubble up.\n    \"\"\"\n    if amount_cents <= 0:\n        raise PaymentError(\"amount must be positive\")\n    if not luhn_checksum_ok(card_number):\n        raise PaymentError(\"invalid card number\")\n    return client.get(f\"charges?card={card_number}&amount={amount_cents}\")",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "client.get",
+    "PaymentError",
+    "luhn_checksum_ok"
+   ],
+   "imports": [
+    "utils.http.HttpClient"
+   ]
+  },
+  {
+   "chunk_id": "services/users.py::ValidationError",
+   "kind": "class",
+   "name": "ValidationError",
+   "qualname": "ValidationError",
+   "file": "services/users.py",
+   "start_line": 5,
+   "end_line": 6,
+   "signature": "class ValidationError(Exception):",
+   "docstring": "Raised when user input fails validation.",
+   "source": "class ValidationError(Exception):\n    \"\"\"Raised when user input fails validation.\"\"\"",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "utils.text.slugify"
+   ]
+  },
+  {
+   "chunk_id": "services/users.py::UserService",
+   "kind": "class",
+   "name": "UserService",
+   "qualname": "UserService",
+   "file": "services/users.py",
+   "start_line": 9,
+   "end_line": 46,
+   "signature": "class UserService:",
+   "docstring": "In-memory user store with light validation.\n\nReal persistence lives behind the same interface in production.",
+   "source": "class UserService:\n    \"\"\"In-memory user store with light validation.\n\n    Real persistence lives behind the same interface in production.\n    \"\"\"\n\n    def __init__(self):\n        self._users = {}\n        self._next_id = 1\n\n    def create_user(self, email, display_name):\n        \"\"\"Create a user after validating email and normalising the handle.\"\"\"\n        # -- validation --------------------------------------------------\n        if not email or \"@\" not in email:\n            raise ValidationError(f\"invalid email: {email!r}\")\n        domain = email.rsplit(\"@\", 1)[1]\n        if \".\" not in domain:\n            raise ValidationError(f\"invalid email domain: {domain!r}\")\n        if not display_name or not display_name.strip():\n            raise ValidationError(\"display name is required\")\n        # -- normalisation -----------------------------------------------\n        handle = slugify(display_name)\n        if any(u[\"handle\"] == handle for u in self._users.values()):\n            handle = f\"{handle}-{self._next_id}\"\n        # -- persistence --------------------------------------------------\n        user = {\n            \"id\": self._next_id,\n            \"email\": email.lower(),\n            \"display_name\": display_name.strip(),\n            \"handle\": handle,\n        }\n        self._users[self._next_id] = user\n        self._next_id += 1\n        return user\n\n    def get_user(self, user_id):\n        \"\"\"Return the user dict for `user_id`, or None.\"\"\"\n        return self._users.get(user_id)",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "utils.text.slugify"
+   ]
+  },
+  {
+   "chunk_id": "services/users.py::UserService.__init__",
+   "kind": "method",
+   "name": "__init__",
+   "qualname": "UserService.__init__",
+   "file": "services/users.py",
+   "start_line": 15,
+   "end_line": 17,
+   "signature": "def __init__(self):",
+   "docstring": null,
+   "source": "    def __init__(self):\n        self._users = {}\n        self._next_id = 1",
+   "language": "python",
+   "parent": "UserService",
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "utils.text.slugify"
+   ]
+  },
+  {
+   "chunk_id": "services/users.py::UserService.create_user",
+   "kind": "method",
+   "name": "create_user",
+   "qualname": "UserService.create_user",
+   "file": "services/users.py",
+   "start_line": 19,
+   "end_line": 42,
+   "signature": "def create_user(self, email, display_name):",
+   "docstring": "Create a user after validating email and normalising the handle.",
+   "source": "    def create_user(self, email, display_name):\n        \"\"\"Create a user after validating email and normalising the handle.\"\"\"\n        # -- validation --------------------------------------------------\n        if not email or \"@\" not in email:\n            raise ValidationError(f\"invalid email: {email!r}\")\n        domain = email.rsplit(\"@\", 1)[1]\n        if \".\" not in domain:\n            raise ValidationError(f\"invalid email domain: {domain!r}\")\n        if not display_name or not display_name.strip():\n            raise ValidationError(\"display name is required\")\n        # -- normalisation -----------------------------------------------\n        handle = slugify(display_name)\n        if any(u[\"handle\"] == handle for u in self._users.values()):\n            handle = f\"{handle}-{self._next_id}\"\n        # -- persistence --------------------------------------------------\n        user = {\n            \"id\": self._next_id,\n            \"email\": email.lower(),\n            \"display_name\": display_name.strip(),\n            \"handle\": handle,\n        }\n        self._users[self._next_id] = user\n        self._next_id += 1\n        return user",
+   "language": "python",
+   "parent": "UserService",
+   "decorators": [],
+   "calls": [
+    "slugify",
+    "any",
+    "ValidationError",
+    "email.rsplit",
+    "email.lower",
+    "display_name.strip",
+    "values"
+   ],
+   "imports": [
+    "utils.text.slugify"
+   ]
+  },
+  {
+   "chunk_id": "services/users.py::UserService.get_user",
+   "kind": "method",
+   "name": "get_user",
+   "qualname": "UserService.get_user",
+   "file": "services/users.py",
+   "start_line": 44,
+   "end_line": 46,
+   "signature": "def get_user(self, user_id):",
+   "docstring": "Return the user dict for `user_id`, or None.",
+   "source": "    def get_user(self, user_id):\n        \"\"\"Return the user dict for `user_id`, or None.\"\"\"\n        return self._users.get(user_id)",
+   "language": "python",
+   "parent": "UserService",
+   "decorators": [],
+   "calls": [
+    "get"
+   ],
+   "imports": [
+    "utils.text.slugify"
+   ]
+  },
+  {
+   "chunk_id": "utils/http.py::HttpError",
+   "kind": "class",
+   "name": "HttpError",
+   "qualname": "HttpError",
+   "file": "utils/http.py",
+   "start_line": 8,
+   "end_line": 9,
+   "signature": "class HttpError(Exception):",
+   "docstring": "Raised when a request fails with a 4xx/5xx status.",
+   "source": "class HttpError(Exception):\n    \"\"\"Raised when a request fails with a 4xx/5xx status.\"\"\"",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "json",
+    "urllib.request",
+    "utils.retry.retry_with_backoff"
+   ]
+  },
+  {
+   "chunk_id": "utils/http.py::fetch_json",
+   "kind": "function",
+   "name": "fetch_json",
+   "qualname": "fetch_json",
+   "file": "utils/http.py",
+   "start_line": 12,
+   "end_line": 19,
+   "signature": "def fetch_json(url, timeout=10.0, retries=3):",
+   "docstring": "GET `url` and decode the JSON body, retrying with backoff.",
+   "source": "def fetch_json(url, timeout=10.0, retries=3):\n    \"\"\"GET `url` and decode the JSON body, retrying with backoff.\"\"\"\n    def _do():\n        with urllib.request.urlopen(url, timeout=timeout) as resp:\n            if resp.status >= 400:\n                raise HttpError(f\"{resp.status} for {url}\")\n            return json.loads(resp.read().decode(\"utf-8\"))\n    return retry_with_backoff(_do, retries=retries)",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "retry_with_backoff",
+    "urlopen",
+    "json.loads",
+    "HttpError",
+    "decode",
+    "resp.read"
+   ],
+   "imports": [
+    "json",
+    "urllib.request",
+    "utils.retry.retry_with_backoff"
+   ]
+  },
+  {
+   "chunk_id": "utils/http.py::HttpClient",
+   "kind": "class",
+   "name": "HttpClient",
+   "qualname": "HttpClient",
+   "file": "utils/http.py",
+   "start_line": 22,
+   "end_line": 32,
+   "signature": "class HttpClient:",
+   "docstring": "Very small JSON HTTP client bound to a base URL.",
+   "source": "class HttpClient:\n    \"\"\"Very small JSON HTTP client bound to a base URL.\"\"\"\n\n    def __init__(self, base_url, timeout=10.0):\n        self.base_url = base_url.rstrip(\"/\")\n        self.timeout = timeout\n\n    def get(self, path):\n        \"\"\"GET a path relative to the base URL and return parsed JSON.\"\"\"\n        return fetch_json(f\"{self.base_url}/{path.lstrip('/')}\",\n                          timeout=self.timeout)",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [],
+   "imports": [
+    "json",
+    "urllib.request",
+    "utils.retry.retry_with_backoff"
+   ]
+  },
+  {
+   "chunk_id": "utils/http.py::HttpClient.__init__",
+   "kind": "method",
+   "name": "__init__",
+   "qualname": "HttpClient.__init__",
+   "file": "utils/http.py",
+   "start_line": 25,
+   "end_line": 27,
+   "signature": "def __init__(self, base_url, timeout=10.0):",
+   "docstring": null,
+   "source": "    def __init__(self, base_url, timeout=10.0):\n        self.base_url = base_url.rstrip(\"/\")\n        self.timeout = timeout",
+   "language": "python",
+   "parent": "HttpClient",
+   "decorators": [],
+   "calls": [
+    "base_url.rstrip"
+   ],
+   "imports": [
+    "json",
+    "urllib.request",
+    "utils.retry.retry_with_backoff"
+   ]
+  },
+  {
+   "chunk_id": "utils/http.py::HttpClient.get",
+   "kind": "method",
+   "name": "get",
+   "qualname": "HttpClient.get",
+   "file": "utils/http.py",
+   "start_line": 29,
+   "end_line": 32,
+   "signature": "def get(self, path):",
+   "docstring": "GET a path relative to the base URL and return parsed JSON.",
+   "source": "    def get(self, path):\n        \"\"\"GET a path relative to the base URL and return parsed JSON.\"\"\"\n        return fetch_json(f\"{self.base_url}/{path.lstrip('/')}\",\n                          timeout=self.timeout)",
+   "language": "python",
+   "parent": "HttpClient",
+   "decorators": [],
+   "calls": [
+    "fetch_json",
+    "path.lstrip"
+   ],
+   "imports": [
+    "json",
+    "urllib.request",
+    "utils.retry.retry_with_backoff"
+   ]
+  },
+  {
+   "chunk_id": "utils/retry.py::retry_with_backoff",
+   "kind": "function",
+   "name": "retry_with_backoff",
+   "qualname": "retry_with_backoff",
+   "file": "utils/retry.py",
+   "start_line": 6,
+   "end_line": 26,
+   "signature": "def retry_with_backoff(fn, retries=3, base_delay=0.5, factor=2.0, jitter=0.1, retry_on=(Exception,)):",
+   "docstring": "Call `fn` with exponential backoff on failure.\n\nRetries up to `retries` times, sleeping base_delay * factor**attempt\n(plus uniform jitter) between attempts, then re-raises the last\nerror. Use this for any flaky network call instead of hand-rolling\nretry loops.",
+   "source": "def retry_with_backoff(fn, retries=3, base_delay=0.5, factor=2.0, jitter=0.1,\n                       retry_on=(Exception,)):\n    \"\"\"Call `fn` with exponential backoff on failure.\n\n    Retries up to `retries` times, sleeping base_delay * factor**attempt\n    (plus uniform jitter) between attempts, then re-raises the last\n    error. Use this for any flaky network call instead of hand-rolling\n    retry loops.\n    \"\"\"\n    attempt = 0\n    while True:\n        try:\n            return fn()\n        except retry_on:\n            attempt += 1\n            if attempt > retries:\n                raise\n            # exponential backoff with a little jitter to avoid stampedes\n            delay = base_delay * (factor ** (attempt - 1))\n            delay += random.uniform(0, jitter)\n            time.sleep(delay)",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "fn",
+    "random.uniform",
+    "time.sleep"
+   ],
+   "imports": [
+    "random",
+    "time"
+   ]
+  },
+  {
+   "chunk_id": "utils/text.py::slugify",
+   "kind": "function",
+   "name": "slugify",
+   "qualname": "slugify",
+   "file": "utils/text.py",
+   "start_line": 7,
+   "end_line": 10,
+   "signature": "def slugify(value):",
+   "docstring": "Lowercase `value` and collapse non-alphanumerics into dashes.",
+   "source": "def slugify(value):\n    \"\"\"Lowercase `value` and collapse non-alphanumerics into dashes.\"\"\"\n    value = _slug_re.sub(\"-\", value.lower()).strip(\"-\")\n    return value or \"item\"",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "strip",
+    "_slug_re.sub",
+    "value.lower"
+   ],
+   "imports": [
+    "re"
+   ]
+  },
+  {
+   "chunk_id": "utils/text.py::truncate_words",
+   "kind": "function",
+   "name": "truncate_words",
+   "qualname": "truncate_words",
+   "file": "utils/text.py",
+   "start_line": 13,
+   "end_line": 18,
+   "signature": "def truncate_words(text, max_words=25, suffix='\u2026'):",
+   "docstring": "Cut `text` to at most `max_words` words, appending `suffix` if cut.",
+   "source": "def truncate_words(text, max_words=25, suffix=\"\u2026\"):\n    \"\"\"Cut `text` to at most `max_words` words, appending `suffix` if cut.\"\"\"\n    words = text.split()\n    if len(words) <= max_words:\n        return text\n    return \" \".join(words[:max_words]) + suffix",
+   "language": "python",
+   "parent": null,
+   "decorators": [],
+   "calls": [
+    "text.split",
+    "len",
+    "join"
+   ],
+   "imports": [
+    "re"
+   ]
+  }
+ ]
+}
