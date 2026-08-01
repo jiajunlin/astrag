@@ -1407,17 +1407,21 @@ rather than:
 
 ## astrag/
 
-- `parsing.py` — Source parsing and AST extraction
-- `graph.py` — Symbol graph construction
-- `retrieval.py` — Hybrid retrieval algorithms
-- `tools.py` — Agent-facing tools
-- `langs.py` — Language configuration
-- `universal.py` — Generic language support
-- `slicing.py` — Backward dependency analysis
-- `compression.py` — Semantic-anchor compression
-- `pipeline.py` — End-to-end orchestration
-- `mcp_server.py` — MCP integration
+- `__init__.py` — package exports and API surface
 - `__main__.py` — CLI entry point
+- `cache.py` — repository caching and incremental indexing
+- `compression.py` — semantic-anchor compression
+- `crosslang.py` — cross-language API tracing and graph edges
+- `graph.py` — symbol graph construction
+- `graph_export.py` — graph export and visualization helpers
+- `langs.py` — language definitions and parser heuristics
+- `mcp_server.py` — Model Context Protocol server integration
+- `parsing.py` — source parsing and AST extraction
+- `pipeline.py` — end-to-end orchestration and context builder
+- `retrieval.py` — hybrid retrieval algorithms
+- `slicing.py` — backward dependency analysis
+- `tools.py` — agent-facing tools
+- `universal.py` — generic language support
 
 ## Demo projects
 
