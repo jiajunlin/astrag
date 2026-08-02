@@ -68,24 +68,29 @@ class CodebaseTools:
         return out
 
     def get_dependency_graph(self, chunk_id: str, depth: int = 2) -> dict:
-        """Live BFS subgraph of ``calls``/``api_calls`` edges around one
-        chunk, out to ``depth`` hops both directions — for inspecting the
-        blast radius of a change without re-running the whole indexer."""
+        """Live BFS subgraph around one chunk, out to ``depth`` hops both
+        directions, over the full unified meta-graph — static ``calls``
+        plus any cross-service edges from ``crosslang.py`` (``api_calls``,
+        ``ffi_calls``, ``rpc_calls``) — for inspecting the blast radius of
+        a change without re-running the whole indexer."""
         graph = self.memory.graph
+        edge_getters = [
+            ("calls", graph.callees_of, graph.callers_of),
+            ("api_calls", graph.api_callees_of, graph.api_callers_of),
+            ("ffi_calls", graph.ffi_callees_of, graph.ffi_callers_of),
+            ("rpc_calls", graph.rpc_callees_of, graph.rpc_callers_of),
+        ]
         nodes = {chunk_id}
         edges: list[tuple[str, str, str]] = []
         frontier = {chunk_id}
         for _ in range(max(0, depth)):
             nxt: set[str] = set()
             for n in frontier:
-                for d in graph.callees_of(n):
-                    edges.append((n, "calls", d)); nxt.add(d)
-                for s in graph.callers_of(n):
-                    edges.append((s, "calls", n)); nxt.add(s)
-                for d in graph.api_callees_of(n):
-                    edges.append((n, "api_calls", d)); nxt.add(d)
-                for s in graph.api_callers_of(n):
-                    edges.append((s, "api_calls", n)); nxt.add(s)
+                for kind, callees_of, callers_of in edge_getters:
+                    for d in callees_of(n):
+                        edges.append((n, kind, d)); nxt.add(d)
+                    for s in callers_of(n):
+                        edges.append((s, kind, n)); nxt.add(s)
             nxt -= nodes
             nodes |= nxt
             frontier = nxt
@@ -130,7 +135,9 @@ class CodebaseTools:
         return results
 
     def get_slice(self, chunk_id: str, query: str = "", max_depth: int = 1) -> dict:
-        """Return the SDG slice for a chunk, including callees as needed."""
+        """Return the SDG-lite slice for a chunk, including callees as
+        needed (see ``slicing.interprocedural_slice``)."""
+        from .compression import _render_kept
         from .slicing import interprocedural_slice
         chunk = self.memory.chunk(chunk_id)
         anchors = set(code_tokens(query)) if query else set()
@@ -147,23 +154,28 @@ class CodebaseTools:
                 "chunk_id": cid,
                 "file": c.file,
                 "lines": sorted(kept_lines) if kept_lines else [],
-                "source": c.source if not kept_lines else "\n".join(
-                    [c.source.splitlines()[i] for i in sorted(kept_lines)]
-                )
+                "source": (_render_kept(c.source, kept_lines) if kept_lines
+                          else c.source),
             })
         return {"slice": result}
 
     def predict_impact(self, chunk_id: str, new_code: str = None) -> dict:
-        """Analyze impact of changing a chunk: its callers and callees."""
+        """Analyze impact of changing a chunk: its direct and transitive
+        callers/callees over the static call graph, plus any cross-service
+        callers (frontend/RPC-client/FFI-caller) that would also need to
+        change — those are often the ones missed when eyeballing a diff,
+        since they live in a different file, language, or process."""
         graph = self.memory.graph
         callees = graph.callees_of(chunk_id)
         callers = graph.callers_of(chunk_id)
+        cross_service = graph.cross_service_neighbors(chunk_id)
         return {
             "chunk_id": chunk_id,
             "callers": callers,
             "callees": callees,
             "transitive_callers": self._transitive_closure(callers, graph, direction="in"),
             "transitive_callees": self._transitive_closure(callees, graph, direction="out"),
+            "cross_service_dependents": cross_service,
         }
 
     def _transitive_closure(self, seeds, graph, direction="out"):

@@ -27,79 +27,118 @@ Usage::
 from __future__ import annotations
 import re
 from .parsing import CodeChunk
-from pathlib import Path
 
 # ---- FFI: extern declarations in C/C++ and Python ctypes/cffi calls ----
+#
+# Known scope limitation: these patterns match a load-and-call written in
+# one contiguous piece of text (e.g. ``ctypes.CDLL(path).add(a, b)`` inline
+# in a call expression). The far more common real-world pattern —
+# ``lib = ctypes.CDLL(path)`` at module scope, called later as ``lib.add(...)``
+# from inside a function — splits across two statements that usually aren't
+# even in the same chunk (the binding is module-level; ``CodeChunk.source``
+# is just one function's body). Resolving that would mean tracking module-
+# level variable bindings across the whole file, which is a real feature
+# but a bigger one than this pass — documented here rather than silently
+# left to fail on the common case.
 _FFI_PATTERNS = [
-    # C/C++ extern "C" { ... } or extern "C" function prototypes
+    # C/C++ extern "C" { ... } block: pull every function name inside
     re.compile(r'extern\s*"C"\s*\{([^}]*)\}', re.S),
-    re.compile(r'extern\s*"C"\s+([^;{]+)\s*[({;]'),
+    # single extern "C" prototype: name is the identifier right before '('
+    # (not ".split()[-1]" of the whole prototype text, which grabs a
+    # parameter-list token like "b)" instead of the function name)
+    re.compile(r'extern\s*"C"\s+[\w\s\*]*?\b([A-Za-z_]\w*)\s*\('),
     # Python ctypes / cffi: lib.func(), dll.func()
     re.compile(r'\b(?:ctypes\.)?(?:CDLL|WinDLL|LibraryLoader)\([^)]*\)\s*\.\s*([A-Za-z_]\w*)'),
     re.compile(r'\b(?:cffi\.)?FFI\(\)\.(?:dlopen|def_extern)\([^)]*\)\s*\.\s*([A-Za-z_]\w*)'),
 ]
+_FFI_BLOCK = _FFI_PATTERNS[0]
+
 
 def extract_ffi_targets(source: str) -> set[str]:
-    """Return set of C function names that appear to be called via FFI."""
-    found = set()
+    """Return the set of function names that appear to be called via FFI."""
+    found: set[str] = set()
     for pat in _FFI_PATTERNS:
         for m in pat.finditer(source):
-            if len(m.groups()) == 1 and m.group(1):
-                # For extern blocks, we extract function names inside
-                if '{' in m.group(0):
-                    body = m.group(1)
-                    for name in re.findall(r'\b([A-Za-z_]\w*)\s*\(', body):
-                        found.add(name)
-                else:
-                    found.add(m.group(1).strip().split()[-1])
+            if pat is _FFI_BLOCK:
+                for name in re.findall(r'\b([A-Za-z_]\w*)\s*\(', m.group(1)):
+                    found.add(name)
+            elif m.group(1):
+                found.add(m.group(1))
     return found
 
+
 def build_ffi_edges(chunks: list[CodeChunk]) -> list[tuple[str, str, str]]:
-    """Create edges from chunks that call FFI functions to the C/C++ function definitions."""
-    # First, collect all function declarations that are marked extern in C/C++ chunks
-    ffi_defined = set()
+    """Edges from chunks that call an FFI function to the C/C++ chunk that
+    actually defines it (resolved to a real chunk_id, not a bare name —
+    edge endpoints elsewhere in the graph are always chunk_ids, and a
+    dangling name-string endpoint wouldn't resolve via ``get_function_body``
+    or show up correctly in graph_export)."""
+    # name -> chunk_id, for C/C++ functions declared with extern "C" linkage
+    ffi_defined: dict[str, str] = {}
     for c in chunks:
         if c.language in ('c', 'cpp', 'objc'):
-            # Look for function prototypes with extern linkage
-            if re.search(r'\bextern\s*"C"\s+\w+\s+\*?\s*([A-Za-z_]\w*)\s*\(', c.source):
-                ffi_defined.add(c.name)
-    edges = []
+            if re.search(r'\bextern\s*"C"\s+[\w\s\*]*?\b' + re.escape(c.name)
+                        + r'\s*\(', c.source):
+                ffi_defined[c.name] = c.chunk_id
+
+    edges: list[tuple[str, str, str]] = []
     for c in chunks:
-        targets = extract_ffi_targets(c.source)
-        for t in targets:
-            if t in ffi_defined:
-                edges.append((c.chunk_id, "ffi_calls", t))  # edge to the C function by name; we'll resolve later
+        for name in extract_ffi_targets(c.source):
+            target_id = ffi_defined.get(name)
+            if target_id and target_id != c.chunk_id:
+                edges.append((c.chunk_id, "ffi_calls", target_id))
     return edges
 
-# ---- RPC: gRPC (protobuf) and GraphQL ----
+# ---- RPC: gRPC (protobuf) ----
 _PROTO_SERVICE = re.compile(r'service\s+(\w+)\s*\{([^}]*)\}', re.S)
 _PROTO_RPC = re.compile(r'rpc\s+(\w+)\s*\([^)]*\)\s*returns\s*\([^)]*\)')
-_GRAPHQL_QUERY = re.compile(r'query\s+(\w+)\s*\([^)]*\)\s*\{([^}]*)\}')
-_GRAPHQL_MUTATION = re.compile(r'mutation\s+(\w+)\s*\([^)]*\)\s*\{([^}]*)\}')
+
 
 def build_rpc_edges(chunks: list[CodeChunk]) -> list[tuple[str, str, str]]:
-    """Link client stub calls (in any language) to service definitions (proto/GraphQL)."""
-    # Collect all service/method definitions from proto and GraphQL files
-    service_methods = {}  # service_name -> set of method names
+    """Link client stub calls to the servicer method that implements them.
+
+    Proto ``service X { rpc Method(...) }`` declares the contract; the
+    implementation is normally a class whose name contains the service
+    name (e.g. a generated ``XServicer`` base, or a hand-written service
+    class) with a method matching the rpc name. Client call sites rarely
+    name their stub/channel variable after the literal service name (e.g.
+    ``stub.SubmitOrder(...)``, not ``OrderService.SubmitOrder(...)``), so
+    matching is done on the *method* name across all known services, not
+    on the qualifier — the method names in one proto file are usually
+    distinctive enough that this doesn't produce much cross-service noise.
+    Only edges that resolve to a real implementing chunk are kept; an
+    unresolvable rpc name is skipped rather than pointed at a synthetic
+    ``"Service.Method"`` string that isn't a real graph node.
+    """
+    method_to_service: dict[str, str] = {}
     for c in chunks:
         if c.language == 'proto':
             for sm in _PROTO_SERVICE.finditer(c.source):
                 service = sm.group(1)
-                body = sm.group(2)
-                methods = set(_PROTO_RPC.findall(body))
-                service_methods[service] = methods
-        elif c.language == 'graphql':
-            # Assume GraphQL schema: type Query { ... }
-            # we can just record all field names as methods
-            pass  # We'll parse later if needed
-    # For now, we just link client calls that match service.method pattern
-    edges = []
+                for method in _PROTO_RPC.findall(sm.group(2)):
+                    method_to_service[method] = service
+
+    if not method_to_service:
+        return []
+
+    # servicer implementation: a method whose name is a known rpc method,
+    # defined on a class whose name contains the service name (handles both
+    # generated `XServicer` bases and hand-written `XServiceImpl`-style names)
+    impl_by_method: dict[str, str] = {}
     for c in chunks:
-        # Look for calls like service.Method(...) or client.Method(...)
-        for m in re.finditer(r'\b(\w+)\.(\w+)\s*\(', c.source):
-            service, method = m.group(1), m.group(2)
-            if service in service_methods and method in service_methods[service]:
-                edges.append((c.chunk_id, "rpc_calls", f"{service}.{method}"))
+        if c.kind != 'method' or not c.parent or c.name not in method_to_service:
+            continue
+        service = method_to_service[c.name]
+        if service.lower() in c.parent.lower():
+            impl_by_method[c.name] = c.chunk_id
+
+    edges: list[tuple[str, str, str]] = []
+    for c in chunks:
+        for m in re.finditer(r'\b\w+\.(\w+)\s*\(', c.source):
+            method = m.group(1)
+            target_id = impl_by_method.get(method)
+            if target_id and target_id != c.chunk_id and method in method_to_service:
+                edges.append((c.chunk_id, "rpc_calls", target_id))
     return edges
 
 # ---- frontend: HTTP client calls with a literal path -----------------

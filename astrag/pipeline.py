@@ -237,7 +237,11 @@ class CodebaseMemory:
                                          k_chunks=k_chunks * 2,
                                          graph_boost=graph_boost,
                                          ppr_weight=ppr_weight)
-        result.cards = self._blend_ppr(result.cards, ppr_weight)[:k_chunks]
+        # if the caller didn't pin ppr_weight, use what stage2 resolved
+        # (its own auto-tune or self.ppr_weight) instead of re-deriving
+        # a second, disconnected default here
+        effective_pw = ppr_weight if ppr_weight is not None else result.ppr_weight
+        result.cards = self._blend_ppr(result.cards, effective_pw)[:k_chunks]
         return result
 
     def _blend_ppr(self, cards: list[RetrievedCard], ppr_weight: float | None = None) -> list[RetrievedCard]:

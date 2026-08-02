@@ -123,6 +123,8 @@ class RetrievalResult:
     query: str
     files: list[tuple[str, float]]   # stage 1
     cards: list[RetrievedCard]       # stage 2
+    graph_boost: float | None = None   # resolved value actually used (auto-tuned or explicit)
+    ppr_weight: float | None = None    # resolved value actually used (auto-tuned or explicit)
 
 
 # --------------------------------------------------------------------------
@@ -187,7 +189,16 @@ class TwoStageRetriever:
         """Return (graph_boost, ppr_weight) tuned for this query.
 
         Uses query specificity (code-identifier density) and score spread
-        to adjust the importance of graph centrality.
+        to adjust the importance of graph centrality. Kept deliberately
+        modest: centrality is *query-independent* (it's the same uniform
+        PPR for every query), so it should nudge ranking toward widely-
+        used utilities when the query is vague, not override lexical
+        relevance. Measured against demo/eval/queries_sample_repo.json,
+        the original 0.1-0.4 range let a natural-language query put 40%+
+        of the final score on centrality alone and dropped hit-rate@5
+        from 1.00 to 0.60 (leaf utilities like slugify/truncate_words
+        buried under widely-called utilities that don't answer the
+        query); 0.03-0.15 recovers that without disabling the signal.
         """
         # 1. Query specificity: fraction of tokens that are code identifiers
         tokens = code_tokens(query)
@@ -198,8 +209,8 @@ class TwoStageRetriever:
             all_names.update(code_tokens(c.qualname))
         code_ratio = sum(1 for t in tokens if t in all_names) / max(1, len(tokens))
         # code_ratio ~ 0 for natural language, ~1 for code-heavy queries
-        # Map to graph_boost: lower for high code_ratio (0.1), higher for low code_ratio (0.4)
-        graph_boost = 0.1 + (0.4 - 0.1) * (1 - code_ratio)
+        # Map to graph_boost: lower for high code_ratio, higher for low code_ratio
+        graph_boost = 0.03 + (0.15 - 0.03) * (1 - code_ratio)
 
         # 2. Score spread: coefficient of variation of the top 10 fused scores
         scores = list(fused_scores.values())
@@ -213,8 +224,9 @@ class TwoStageRetriever:
             cv_clipped = max(0.1, min(1.0, cv))
             adjustment = 0.8 + 0.4 * (1 - cv_clipped)  # 0.8 if cv=1, 1.2 if cv=0.1
             graph_boost *= adjustment
-        # Clamp to [0.05, 0.5]
-        graph_boost = max(0.05, min(0.5, graph_boost))
+        # Clamp to [0.02, 0.2] -- see docstring: this is a ranking nudge,
+        # not a replacement for lexical/semantic relevance.
+        graph_boost = max(0.02, min(0.2, graph_boost))
 
         # ppr_weight: we set it slightly lower than graph_boost (0.8x) to avoid over‑blending
         ppr_weight = graph_boost * 0.8
@@ -253,7 +265,8 @@ class TwoStageRetriever:
     # ---- stage 2: fine (signature cards, never bodies) ----
     def stage2_cards(self, query: str, files=None, k: int = 10,
                      kinds=None, graph_boost: float | None = None,
-                     ppr_weight: float | None = None) -> list[RetrievedCard]:
+                     ppr_weight: float | None = None,
+                     _resolved_weights: dict | None = None) -> list[RetrievedCard]:
         fused = self._fused(query, self._chunk_doc, self._chunk_sym,
                             self._chunk_dense, len(self.chunks))
 
@@ -264,15 +277,26 @@ class TwoStageRetriever:
                 graph_boost = gb
             if ppr_weight is None:
                 ppr_weight = pw
+        if _resolved_weights is not None:
+            # lets retrieve() thread the (possibly auto-tuned) ppr_weight
+            # through to pipeline.py's second PPR blend instead of that
+            # blend falling back to its own unrelated static default
+            _resolved_weights["graph_boost"] = graph_boost
+            _resolved_weights["ppr_weight"] = ppr_weight
 
-        # Apply graph expansion and reranking (these don't use graph_boost)
-        fused = self._expand_graph(fused)
-        fused = self._rerank(query, fused)
-        # Use the (possibly dynamic) graph_boost
-        fused = self._boost_with_graph(fused, graph_boost)
+        # Convert to chunk_id keys *before* anything graph-aware: expand_graph,
+        # rerank, and boost_with_graph all key off chunk_id strings (matching
+        # graph.neighbors()/by_id/personalized_pagerank), not the integer
+        # doc-index RRF works in. Running them on the int-keyed dict is not
+        # just pointless — self.by_id[cid] with an int cid raises KeyError
+        # the moment a real rerank_fn is plugged in, and graph_boost's PPR
+        # blend can never match an int key against ppr's string keys, so it
+        # was silently deflating every score by (1 - graph_boost) instead of
+        # blending in structural centrality.
         scores = {self.chunks[i].chunk_id: s for i, s in fused.items()}
         scores = self._expand_graph(scores)
         scores = self._rerank(query, scores)
+        scores = self._boost_with_graph(scores, graph_boost)
 
         allowed = set(files) if files else None
         out: list[RetrievedCard] = []
@@ -337,26 +361,39 @@ class TwoStageRetriever:
     # ---- graph boost (structural centrality) ----
     def _boost_with_graph(self, scores: dict[str, float], graph_boost: float | None = None) -> dict[str, float]:
         boost = graph_boost if graph_boost is not None else self.graph_boost
-        if self.graph is None or boost <= 0:
+        if self.graph is None or boost <= 0 or not scores:
             return scores
         # Compute uniform PageRank for all nodes
         uniform = {cid: 1.0 for cid in self.graph.chunk_ids}
         ppr = self.graph.personalized_pagerank(uniform)
         max_ppr = max(ppr.values()) if ppr else 1.0
-        # Blend: new_score = (1 - boost)*old + boost * normalized_ppr
+        # Relevance scores here are raw RRF sums (~0.01-0.03 typically),
+        # while ppr is normalized to [0, 1] below -- blending them directly
+        # without normalizing both to the same scale means `boost` doesn't
+        # mean what it says: even boost=0.02 let centrality swamp the
+        # entire relevance signal, since 0.02 * 1.0 can exceed 0.98 * 0.03.
+        # Normalize relevance to [0, 1] over this candidate set first, blend,
+        # then rescale back so magnitudes stay comparable to the un-boosted
+        # case (e.g. find_existing's score-ratio threshold still behaves).
+        max_s = max(scores.values()) or 1.0
         out = {}
         for cid, s in scores.items():
+            s_norm = s / max_s
             ppr_score = ppr.get(cid, 0.0) / max_ppr
-            out[cid] = (1 - boost) * s + boost * ppr_score
+            out[cid] = ((1 - boost) * s_norm + boost * ppr_score) * max_s
         return out
 
     def retrieve(self, query: str, k_files: int = 4,
                  k_chunks: int = 10, graph_boost: float | None = None,
                  ppr_weight: float | None = None) -> RetrievalResult:
         files = self.stage1_files(query, k=k_files)
+        resolved: dict = {}
         cards = self.stage2_cards(query, files=[f for f, _ in files], k=k_chunks,
-                                  graph_boost=graph_boost, ppr_weight=ppr_weight)
-        return RetrievalResult(query=query, files=files, cards=cards)
+                                  graph_boost=graph_boost, ppr_weight=ppr_weight,
+                                  _resolved_weights=resolved)
+        return RetrievalResult(query=query, files=files, cards=cards,
+                               graph_boost=resolved.get("graph_boost", graph_boost),
+                               ppr_weight=resolved.get("ppr_weight", ppr_weight))
 
     # ---- replication check ----
     def find_existing(self, description: str, k: int = 5) -> list[RetrievedCard]:

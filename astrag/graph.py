@@ -47,14 +47,7 @@ class CodeGraph:
         self.edges: list[tuple[str, str, str]] = []
         self._out: dict[str, list[tuple[str, str]]] = defaultdict(list)
         self._in: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    def neighbors(self, chunk_id: str) -> list[str]:
-        """All nodes directly connected to chunk_id (in or out) via any edge kind."""
-        out = set()
-        for _, dst in self._out.get(chunk_id, []):
-            out.add(dst)
-        for _, src in self._in.get(chunk_id, []):
-            out.add(src)
-        return sorted(out)
+
     # ---- construction ----
     @classmethod
     def from_chunks(cls, chunks: list[CodeChunk]) -> "CodeGraph":
@@ -151,6 +144,27 @@ class CodeGraph:
     def callers_of(self, chunk_id: str) -> list[str]:
         return sorted({s for k, s in self._in.get(chunk_id, []) if k == "calls"})
 
+    def neighbors(self, chunk_id: str, kinds: tuple = ("calls",)) -> list[str]:
+        """Undirected 1-hop neighbourhood over the given edge kind(s).
+
+        Defaults to the static call graph only (``calls``) — this is what
+        retrieval's graph-hop expansion uses, and it deliberately excludes
+        ``contains`` edges: a class and its own methods, or a file and its
+        top-level definitions, are structurally adjacent but not a call
+        relationship, so including them here would leak score to unrelated
+        siblings just for sitting in the same file/class. Pass e.g.
+        ``("calls", "api_calls", "ffi_calls", "rpc_calls")`` to also expand
+        across cross-service edges from ``crosslang.py``.
+        """
+        out: set[str] = set()
+        for k, d in self._out.get(chunk_id, []):
+            if k in kinds:
+                out.add(d)
+        for k, s in self._in.get(chunk_id, []):
+            if k in kinds:
+                out.add(s)
+        return sorted(out)
+
     def _out_of_kind(self, chunk_id: str, kind: str) -> list[str]:
         return sorted({d for k, d in self._out.get(chunk_id, []) if k == kind})
 
@@ -191,17 +205,6 @@ class CodeGraph:
                       set(self.ffi_callers_of(chunk_id)) |
                       set(self.rpc_callees_of(chunk_id)) |
                       set(self.rpc_callers_of(chunk_id)))
-
-    def api_callees_of(self, chunk_id: str) -> list[str]:
-        """Backend route handlers this chunk calls over HTTP (see
-        ``crosslang.py``); empty unless ``trace_api_calls`` was enabled."""
-        return sorted({d for k, d in self._out.get(chunk_id, [])
-                      if k == "api_calls"})
-
-    def api_callers_of(self, chunk_id: str) -> list[str]:
-        """Frontend call sites that reach this chunk over HTTP."""
-        return sorted({s for k, s in self._in.get(chunk_id, [])
-                      if k == "api_calls"})
 
     # ---- personalized pagerank ----
     def personalized_pagerank(self, preference: dict[str, float],
