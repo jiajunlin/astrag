@@ -111,7 +111,8 @@ class PythonStdlibParser:
     def parse_file(self, rel_path: str, source: str) -> list[CodeChunk]:
         try:
             tree = ast.parse(source)
-        except SyntaxError:
+        except SyntaxError as e:
+            print(f"[Parsing Warning] Could not parse {rel_path}: {e}")
             return []
         lines = source.splitlines()
         imports = self._imports(tree)

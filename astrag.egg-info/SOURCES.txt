@@ -8,12 +8,14 @@ astrag/compression.py
 astrag/crosslang.py
 astrag/graph.py
 astrag/graph_export.py
+astrag/ignore.py
 astrag/langs.py
 astrag/mcp_server.py
 astrag/parsing.py
 astrag/pipeline.py
 astrag/retrieval.py
 astrag/slicing.py
+astrag/test.py
 astrag/tools.py
 astrag/universal.py
 astrag.egg-info/PKG-INFO

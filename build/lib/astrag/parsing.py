@@ -111,16 +111,31 @@ class PythonStdlibParser:
     def parse_file(self, rel_path: str, source: str) -> list[CodeChunk]:
         try:
             tree = ast.parse(source)
-        except SyntaxError:
+        except SyntaxError as e:
+            print(f"[Parsing Warning] Could not parse {rel_path}: {e}")
             return []
         lines = source.splitlines()
         imports = self._imports(tree)
         chunks: list[CodeChunk] = []
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                chunks.append(self._function(node, rel_path, lines, imports, parent=None))
-            elif isinstance(node, ast.ClassDef):
-                chunks.extend(self._class(node, rel_path, lines, imports))
+        def visit(nodes):
+            for node in nodes:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    chunks.append(self._function(node, rel_path, lines, imports, parent=None))
+                elif isinstance(node, ast.ClassDef):
+                    chunks.extend(self._class(node, rel_path, lines, imports))
+                # Recursively walk inside if/try/while/for blocks, ignoring nested functions/classes
+                elif hasattr(node, "body") and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    visit(node.body)
+                    if hasattr(node, "orelse"):
+                        visit(node.orelse)
+                    if hasattr(node, "finalbody"):
+                        visit(node.finalbody)
+                    if hasattr(node, "handlers"):
+                        for h in node.handlers:
+                            if hasattr(h, "body"):
+                                visit(h.body)
+
+        visit(tree.body)
         return chunks
 
     # ---- helpers ----
@@ -310,20 +325,88 @@ class TreeSitterParser:
 DEFAULT_EXCLUDES = {
     ".git", "__pycache__", "node_modules", ".venv", "venv", "env",
     "dist", "build", ".mypy_cache", ".pytest_cache", ".tox", ".astrag",
+    # dependency / vendored-code directories (not source you'd search)
+    "vendor", "target", "Pods", "site-packages", ".eggs",
+    # build tool / framework output & caches
+    ".next", ".nuxt", ".svelte-kit", "out", "bin", "obj",
+    ".gradle", ".idea", "coverage", ".nyc_output", ".cache",
+    ".parcel-cache", ".terraform", ".serverless", ".nx", ".turbo",
+    "cdk.out", "Debug", "Release",
+}
+
+# Auto-generated/lockfile-style files: plain text (so they'd otherwise fall
+# through to the generic chunker as noisy "segment" chunks — no functions
+# or classes, just dependency-resolution data), and typically committed to
+# git on purpose, so ``.gitignore`` alone won't exclude them. Matched by
+# exact filename, skipped regardless of gitignore status.
+GENERATED_FILENAMES = {
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "bun.lockb", "Cargo.lock", "poetry.lock", "Pipfile.lock", "uv.lock",
+    "go.sum", "composer.lock", "Gemfile.lock", "mix.lock", "flake.lock",
+    "packages.lock.json", "paket.lock",
 }
 
 
 def iter_source_files(root: str, extensions: tuple[str, ...] | None,
-                      excludes: set[str] = DEFAULT_EXCLUDES):
+                      excludes: set[str] = DEFAULT_EXCLUDES,
+                      respect_gitignore: bool = True,
+                      skip_generated: bool = True,
+                      report: dict | None = None):
     """Yield ``(relative_path, absolute_path)`` for matching source files.
 
     ``extensions=None`` walks *every* file (binary/oversize filtering is
-    the caller's job)."""
+    the caller's job). Beyond the built-in ``excludes`` directory names,
+    two more layers are applied before a file is even offered to the
+    caller: nested ``.gitignore``/``.astragignore`` matching (see
+    ``ignore.py``; disable with ``respect_gitignore=False``) and a fixed
+    lockfile/generated-file skip list (``GENERATED_FILENAMES``; disable
+    with ``skip_generated=False``).
+
+    Pass a dict as ``report`` to get skip counts back
+    (``excluded_dirs``, ``gitignored_dirs``, ``gitignored_files``,
+    ``generated_files``) — useful for showing what indexing *didn't*
+    touch and why, rather than leaving coverage gaps invisible.
+    """
     root = os.path.abspath(root)
+    matcher = None
+    if respect_gitignore:
+        from .ignore import IgnoreMatcher
+        matcher = IgnoreMatcher(root)
+
+    def _bump(key: str) -> None:
+        if report is not None:
+            report[key] = report.get(key, 0) + 1
+
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames
-                             if d not in excludes and not d.startswith("."))
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        rel_dir = "" if rel_dir == "." else rel_dir
+        if matcher is not None:
+            matcher.descend(rel_dir)
+
+        kept_dirs = []
+        for d in sorted(dirnames):
+            if d in excludes or d.startswith("."):
+                _bump("excluded_dirs")
+                continue
+            child_rel = f"{rel_dir}/{d}" if rel_dir else d
+            if matcher is not None and matcher.matches(child_rel, is_dir=True):
+                _bump("gitignored_dirs")
+                continue
+            kept_dirs.append(d)
+        dirnames[:] = kept_dirs
+
         for fn in sorted(filenames):
-            if extensions is None or os.path.splitext(fn)[1] in extensions:
-                full = os.path.join(dirpath, fn)
-                yield os.path.relpath(full, root).replace(os.sep, "/"), full
+            if fn.startswith("."):
+                _bump("dotfiles")   # config/metadata (.gitignore, .env, …), not code
+                continue
+            if extensions is not None and os.path.splitext(fn)[1] not in extensions:
+                continue
+            if skip_generated and fn in GENERATED_FILENAMES:
+                _bump("generated_files")
+                continue
+            rel_file = f"{rel_dir}/{fn}" if rel_dir else fn
+            if matcher is not None and matcher.matches(rel_file, is_dir=False):
+                _bump("gitignored_files")
+                continue
+            full = os.path.join(dirpath, fn)
+            yield rel_file, full
