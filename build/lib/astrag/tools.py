@@ -49,14 +49,6 @@ class CodebaseTools:
         """Live counts of the dependency graph: files, chunks, edges."""
         return self.memory.graph.stats()
 
-    def get_index_report(self) -> dict:
-        """What indexing did and didn't cover, and why: files considered
-        vs. actually indexed, plus a breakdown of every skip reason
-        (gitignored, a lockfile/generated file, binary, oversize,
-        unreadable, or a parse error). Call this when results seem to be
-        missing files, instead of guessing."""
-        return self.memory.index_report()
-
     def get_central_functions(self, k: int = 10) -> list[dict]:
         """The most structurally central chunks (Personalized PageRank,
         uniform preference over every chunk) — the utilities most of the
@@ -244,12 +236,6 @@ class CodebaseTools:
             {"name": "get_graph_stats",
              "description": ("Live counts of the dependency graph: indexed "
                              "files, chunks, contains/call edges."),
-             "input_schema": obj({}, [])},
-            {"name": "get_index_report",
-             "description": ("What indexing skipped and why (gitignored, "
-                             "a lockfile, binary, oversize, unreadable, "
-                             "parse error) — use when results seem to be "
-                             "missing files."),
              "input_schema": obj({}, [])},
             {"name": "get_central_functions",
              "description": ("The most structurally central chunks in the "

@@ -27,12 +27,6 @@ def main(argv=None) -> int:
                    help="enable dense embeddings (requires sentence-transformers)")
     p.add_argument("--dense-model", default="all-MiniLM-L6-v2",
                    help="model name for dense encoder")
-    p.add_argument("--no-gitignore", action="store_true",
-                   help="index files that .gitignore/.astragignore would "
-                        "normally exclude")
-    p.add_argument("--report", action="store_true",
-                   help="print the full skip breakdown (why each file "
-                        "wasn't indexed), not just the totals")
 
     p = sub.add_parser("query", help="build a compressed prompt context")
     p.add_argument("index")
@@ -69,9 +63,6 @@ def main(argv=None) -> int:
                    help="enable dense embeddings (requires sentence-transformers)")
     p.add_argument("--dense-model", default="all-MiniLM-L6-v2",
                    help="model name for dense encoder")
-    p.add_argument("--no-gitignore", action="store_true",
-                   help="index files that .gitignore/.astragignore would "
-                        "normally exclude")
 
     p = sub.add_parser("graph-export", help="export the dependency graph "
                     "for a graph database or GraphViz")
@@ -92,12 +83,9 @@ def main(argv=None) -> int:
     if args.cmd == "index":
         mem = CodebaseMemory(trace_api_calls=args.trace_api,
                              dense_model=args.dense_model if args.dense else None)
-        mem.index_repo(args.root, cache_path=args.cache,
-                       respect_gitignore=not args.no_gitignore)
+        mem.index_repo(args.root, cache_path=args.cache)
         mem.save(args.out)
         print(f"indexed {args.root}: {mem.stats()} -> {args.out}")
-        if args.report:
-            print(f"index report: {mem.index_report()}")
     elif args.cmd == "query":
         mem = CodebaseMemory.load(args.index,
                                    graph_boost=args.graph_boost if args.graph_boost is not None else 0.1,
@@ -125,8 +113,7 @@ def main(argv=None) -> int:
         else:
             mem = CodebaseMemory(trace_api_calls=args.trace_api,
                                  dense_model=args.dense_model if args.dense else None)
-            mem.index_repo(args.target, cache_path=args.cache,
-                           respect_gitignore=not args.no_gitignore)
+            mem.index_repo(args.target, cache_path=args.cache)
         if args.save:
             mem.save(args.save)
         serve(mem)

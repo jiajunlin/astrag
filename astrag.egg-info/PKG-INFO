@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: astrag
+Version: 0.1.0
+Summary: AST-based code parsing, slicing, and graph mapping tool
+Author: Jiajun Lin
+Requires-Python: >=3.8
+License-File: LICENSE
+Dynamic: author
+Dynamic: license-file
+Dynamic: requires-python
+Dynamic: summary

@@ -1,0 +1,2 @@
+[console_scripts]
+astrag = astrag.__main__:main

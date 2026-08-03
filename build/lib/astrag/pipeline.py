@@ -104,31 +104,18 @@ class CodebaseMemory:
         self.chunks: list[CodeChunk] = []
         self.graph: CodeGraph | None = None
         self.retriever: TwoStageRetriever | None = None
-        # populated by index_repo(): what got skipped and why, so coverage
-        # gaps are visible instead of silent (see index_report())
-        self.last_index_report: dict = {}
 
     # ------------------------------------------------------------------
     # Layer 1 — parse the repo into structural chunks + graph
     # ------------------------------------------------------------------
     def index_repo(self, root, prefer_tree_sitter: bool = False,
-                  cache_path: str | None = None,
-                  respect_gitignore: bool = True) -> "CodebaseMemory":
+                  cache_path: str | None = None) -> "CodebaseMemory":
         """Parse every supported source file under ``root``.
 
         Parser choice per file: Python -> stdlib ``ast`` (richest);
         other languages -> tree-sitter when installed (exact grammars),
         else the built-in heuristic parsers (C, C++, C#, Java, JS/JSX,
         TS/TSX, Go, Rust, PHP, Swift, Kotlin, HTML, CSS).
-
-        Files are filtered *before* parsing is attempted: the fixed
-        ``DEFAULT_EXCLUDES`` directory list, nested ``.gitignore``/
-        ``.astragignore`` (``respect_gitignore=False`` to disable), and a
-        lockfile/generated-file skip list (``GENERATED_FILENAMES`` in
-        ``parsing.py`` — these are plain text and would otherwise land in
-        the index as noisy structureless "segment" chunks). What actually
-        gets skipped, and why, is recorded in ``self.last_index_report``
-        / ``index_report()`` rather than left invisible.
 
         ``cache_path``, if given, enables incremental re-indexing: an
         sqlite cache (``cache.py``) keyed on ``(mtime, size)`` with a
@@ -143,27 +130,18 @@ class CodebaseMemory:
         if cache_path:
             from .cache import IndexCache
             cache = IndexCache(cache_path)
-        report: dict = {"considered": 0, "indexed": 0, "cached_hits": 0,
-                        "skipped_binary": 0, "skipped_too_large": 0,
-                        "skipped_unreadable": 0, "skipped_parse_error": 0}
         try:
-            for rel, full in iter_source_files(
-                    self.root, extensions=None,
-                    respect_gitignore=respect_gitignore, report=report):
-                report["considered"] += 1
+            for rel, full in iter_source_files(self.root, extensions=None):
                 base = os.path.basename(rel)
                 ext = os.path.splitext(base)[1].lower()
                 if ext in BINARY_EXTENSIONS or base.endswith((".min.js",
                                                               ".min.css")):
-                    report["skipped_binary"] += 1
                     continue
                 try:
                     st = os.stat(full)
                     if st.st_size > MAX_FILE_BYTES:
-                        report["skipped_too_large"] += 1
                         continue
                 except OSError:
-                    report["skipped_unreadable"] += 1
                     continue
 
                 _box: list[str] = []       # lazy-read memo, avoids double I/O
@@ -179,17 +157,13 @@ class CodebaseMemory:
                     cached = cache.lookup(rel, st.st_mtime, st.st_size, _read)
                     if cached is not None:
                         chunks += cached
-                        report["indexed"] += 1
-                        report["cached_hits"] += 1
                         continue
 
                 try:
                     source = _read()
                 except OSError:
-                    report["skipped_unreadable"] += 1
                     continue
                 if looks_binary(source):
-                    report["skipped_binary"] += 1
                     continue
                 if ext == ".py" and not prefer_tree_sitter:
                     file_chunks = py.parse_file(rel, source)
@@ -204,30 +178,19 @@ class CodebaseMemory:
                         try:
                             file_chunks = parser_for(rel).parse_file(rel, source)
                         except Exception:
-                            report["skipped_parse_error"] += 1
                             continue      # never let one odd file kill indexing
                 chunks += file_chunks
-                report["indexed"] += 1
                 if cache is not None:
                     cache.store(rel, st.st_mtime, st.st_size, source,
                                file_chunks)
             if cache is not None:
-                report["cache_pruned"] = cache.prune()
+                cache.prune()
         finally:
             if cache is not None:
                 cache.close()
         self.chunks = chunks
-        self.last_index_report = report
         self._rebuild()
         return self
-
-    def index_report(self) -> dict:
-        """What the last ``index_repo()`` call did and didn't index, and
-        why — files considered vs. actually indexed, plus a breakdown of
-        every skip reason (gitignored, a lockfile, binary, oversize,
-        unreadable, or a parse error). Read this when indexing looks
-        incomplete instead of guessing."""
-        return dict(self.last_index_report)
 
     def _rebuild(self) -> None:
         self.graph = CodeGraph.from_chunks(self.chunks)
@@ -255,14 +218,6 @@ class CodebaseMemory:
                "chunks": len(self.chunks), **kinds}
         if self.graph:
             out["call_edges"] = self.graph.stats()["call_edges"]
-        r = self.last_index_report
-        skipped = sum(v for k, v in r.items() if k.startswith("skipped_"))
-        ignored = (r.get("excluded_dirs", 0) + r.get("gitignored_dirs", 0)
-                  + r.get("gitignored_files", 0) + r.get("generated_files", 0)
-                  + r.get("dotfiles", 0))
-        if skipped or ignored:
-            out["skipped"] = skipped        # binary/too-large/parse-error
-            out["ignored"] = ignored        # gitignore/excludes/lockfiles
         return out
 
     def chunk(self, chunk_id: str) -> CodeChunk:
