@@ -79,7 +79,9 @@ _REGEX_RULES: dict[str, list[tuple[re.Pattern, str]]] = {
     ".js": [
         (re.compile(r'^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)', re.M), "function"),
         (re.compile(r'^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)', re.M), "class"),
-        (re.compile(r'^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>', re.M), "function"),
+        (re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function', re.M), "function"),
+        (re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>', re.M), "function"),
+        (re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?[\w$][\w$]*\s*=>', re.M), "function"),
     ],
     ".go": [
         (re.compile(r'^func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)', re.M), "function"),

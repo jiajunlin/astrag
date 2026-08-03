@@ -280,7 +280,10 @@ _TS_COMMON = (
        r"(?:async[ \t]*)?(?=\()", style="arrow"),
     _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
        r"(?:const|let|var)[ \t]+(?P<name>[\w$]+)[^=\n;]*=[ \t]*"
-       r"(?:async[ \t]+)?[\w$]+[ \t]*=>", style="arrow_done"),
+       r"(?:async[ \t]+)?function[ \t]*\*?[ \t]*(?=\()", style="func"),
+    _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
+      r"(?:const|let|var)[ \t]+(?P<name>[\w$]+)[^=\n;]*=[ \t]*"
+      r"(?:async[ \t]+)?[\w$]+[ \t]*=>", style="arrow_done"),
     _p("interface", r"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?interface[ \t]+"
        r"(?P<name>[\w$]+)[^{\n]*(?=\{)", style="block"),
     _p("enum", r"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:const[ \t]+)?"
