@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from astrag import CodebaseMemory                       # noqa: E402
 from astrag.parsing import (DEFAULT_EXCLUDES,            # noqa: E402
                             GENERATED_FILENAMES)
+from astrag.universal import BINARY_EXTENSIONS, looks_binary  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Independent content extraction — deliberately separate from astrag's own
@@ -75,26 +76,37 @@ def scan_python(path: str) -> set[tuple[str, str]] | None:
 
 # name-capturing patterns per extension; each yields (name, kind) tuples.
 # Heuristic, not a real parser -- see module docstring.
+#
+# Anchored at column 0 (``^`` with no leading ``\s*``) deliberately: astrag
+# itself only indexes top-level functions/classes as separate chunks (its
+# own Python parser only walks ``tree.body``, never descending into a
+# function's own body looking for nested defs) -- a nested/inner function
+# is part of its enclosing chunk's source, not a separately searchable
+# unit, by design. A naive regex with no nesting awareness would flag
+# every nested closure as "missing" even though astrag never intended to
+# index it separately. This does mean indented constructs (Java/C++
+# methods inside a class, Rust fns inside an ``impl`` block) aren't
+# independently re-verified here -- an honest reduction in coverage
+# rather than a wall of false positives.
 _REGEX_RULES: dict[str, list[tuple[re.Pattern, str]]] = {
     ".js": [
-        (re.compile(r'^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)', re.M), "function"),
-        (re.compile(r'^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)', re.M), "class"),
-        (re.compile(r'^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>', re.M), "function"),
+        (re.compile(r'^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)', re.M), "function"),
+        (re.compile(r'^(?:export\s+)?class\s+([A-Za-z_$][\w$]*)', re.M), "class"),
+        (re.compile(r'^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>', re.M), "function"),
     ],
     ".go": [
         (re.compile(r'^func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)', re.M), "function"),
         (re.compile(r'^type\s+([A-Za-z_]\w*)\s+struct\b', re.M), "class"),
     ],
     ".rs": [
-        (re.compile(r'^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)', re.M), "function"),
-        (re.compile(r'^\s*(?:pub\s+)?struct\s+([A-Za-z_]\w*)', re.M), "class"),
+        (re.compile(r'^(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)', re.M), "function"),
+        (re.compile(r'^(?:pub\s+)?struct\s+([A-Za-z_]\w*)', re.M), "class"),
     ],
     ".java": [
-        (re.compile(r'^\s*(?:public|private|protected|static|\s)*[\w<>\[\],\s]+\s+([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{', re.M), "method"),
-        (re.compile(r'^\s*(?:public\s+)?class\s+([A-Za-z_]\w*)', re.M), "class"),
+        (re.compile(r'^(?:public\s+)?(?:final\s+)?class\s+([A-Za-z_]\w*)', re.M), "class"),
     ],
-    ".c": [(re.compile(r'^[\w\*\s]+?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{', re.M), "function")],
-    ".cpp": [(re.compile(r'^[\w:\*\s]+?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{', re.M), "function")],
+    ".c": [(re.compile(r'^[A-Za-z_][\w\*\s]*?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{', re.M), "function")],
+    ".cpp": [(re.compile(r'^[A-Za-z_][\w:\*\s]*?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{', re.M), "function")],
 }
 _REGEX_RULES[".jsx"] = _REGEX_RULES[".js"]
 _REGEX_RULES[".ts"] = _REGEX_RULES[".js"]
@@ -202,10 +214,37 @@ def main(argv=None) -> int:
                     help="match how you indexed, if you also used --no-gitignore")
     ap.add_argument("--verbose", action="store_true",
                     help="list every file, not just ones with issues")
+    ap.add_argument("--diff-file", metavar="PATH",
+                    help="skip the full scan; show astrag's indexed chunks "
+                         "vs. the independent scan for exactly one file "
+                         "(path relative to repo root)")
     args = ap.parse_args(argv)
 
     root = os.path.abspath(args.repo)
     respect_gitignore = not args.no_gitignore
+
+    if args.diff_file:
+        print(f"Indexing {root} ...")
+        mem = CodebaseMemory().index_repo(root, respect_gitignore=respect_gitignore)
+        rel = args.diff_file.replace("\\", "/").lstrip("/")
+        full = os.path.join(root, rel)
+        ext = os.path.splitext(rel)[1].lower()
+        indexed = sorted((c.name, c.kind, c.start_line, c.end_line)
+                         for c in mem.chunks if c.file == rel)
+        expected, method = independent_scan(full, ext)
+        print(f"\n=== {rel} ===")
+        print(f"astrag indexed ({len(indexed)}):")
+        for name, kind, s, e in indexed:
+            print(f"    {name}  [{kind}]  lines {s}-{e}")
+        print(f"\nindependent scan [{method}]:")
+        if expected is None:
+            print("    (not independently verified for this extension)")
+        else:
+            indexed_names = {n for n, _, _, _ in indexed}
+            for name, kind in sorted(expected):
+                mark = "OK " if name in indexed_names else "MISSING"
+                print(f"    {mark}  {name}  [{kind}]")
+        return 0
 
     print(f"Indexing {root} ...")
     mem = CodebaseMemory().index_repo(root, respect_gitignore=respect_gitignore)
@@ -229,19 +268,42 @@ def main(argv=None) -> int:
         print("  OK -- counts agree.")
 
     zero_chunk_files = []
+    zero_chunk_expected = 0   # binary ext or looks_binary() -- not a bug
     for rel in sorted(buckets["candidate"]):
         full = os.path.join(root, rel)
         try:
-            if os.path.getsize(full) == 0:
-                continue
+            size = os.path.getsize(full)
         except OSError:
             continue
-        if rel not in indexed_by_file:
-            zero_chunk_files.append(rel)
+        if size == 0:
+            continue
+        if rel in indexed_by_file:
+            continue
+        ext = os.path.splitext(rel)[1].lower()
+        if ext in BINARY_EXTENSIONS:
+            zero_chunk_expected += 1
+            continue
+        # extension alone doesn't say binary (e.g. a minified/generated
+        # .svg or .js) -- ask the same runtime check index_repo() itself
+        # uses before calling anything "unexpected"
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                head = fh.read(8000)
+            if looks_binary(head):
+                zero_chunk_expected += 1
+                continue
+        except OSError:
+            pass
+        zero_chunk_files.append(rel)
+    if zero_chunk_expected:
+        print(f"\n  {zero_chunk_expected} file(s) produced zero chunks as "
+             f"expected (binary extension or looks_binary() — images, "
+             f"fonts, minified/generated assets; not a bug).")
     if zero_chunk_files:
         print(f"\n  {len(zero_chunk_files)} candidate file(s) produced ZERO "
-             f"chunks (binary/too-large/parse-error/empty-of-structure -- "
-             f"cross-check against index_report()'s skip_* counts):")
+             f"chunks with NO obvious binary/minified explanation — "
+             f"cross-check against index_report()'s skip_* counts "
+             f"(too-large / unreadable / parse-error):")
         for rel in zero_chunk_files[:50]:
             print(f"    - {rel}")
         if len(zero_chunk_files) > 50:

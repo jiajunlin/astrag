@@ -269,18 +269,21 @@ JAVA_SPEC = LangSpec(
 # ---- JavaScript / TypeScript (and JSX / TSX) ----
 _JS_DENY = _COMMON_DENY
 _TS_COMMON = (
-_p("function", r"\b(?:export[ \t]+(?:default[ \t]+)?)?"
+    _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
        r"(?:declare[ \t]+)?(?:async[ \t]+)?function[ \t]*\*?[ \t]*"
        r"(?P<name>[\w$]+)?[ \t]*(?=[<(])"),
     _p("class", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
        r"(?:declare[ \t]+)?(?:abstract[ \t]+)?class[ \t]+(?P<name>[\w$]+)"
        r"[^{{\n]*(?=\{)", style="block", container=True),
-    _p("function", r"\b(?:export[ \t]+(?:default[ \t]+)?)?"
+    _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
        r"(?:const|let|var)[ \t]+(?P<name>[\w$]+)[^=\n;]*=[ \t]*"
        r"(?:async[ \t]*)?(?=\()", style="arrow"),
-    _p("function", r"\b(?:export[ \t]+(?:default[ \t]+)?)?"
+    _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
        r"(?:const|let|var)[ \t]+(?P<name>[\w$]+)[^=\n;]*=[ \t]*"
-       r"(?:async[ \t]+)?[\w$]+[ \t]*=>", style="arrow_done"),
+       r"(?:async[ \t]+)?function[ \t]*\*?[ \t]*(?=\()", style="func"),
+    _p("function", r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?"
+      r"(?:const|let|var)[ \t]+(?P<name>[\w$]+)[^=\n;]*=[ \t]*"
+      r"(?:async[ \t]+)?[\w$]+[ \t]*=>", style="arrow_done"),
     _p("interface", r"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?interface[ \t]+"
        r"(?P<name>[\w$]+)[^{\n]*(?=\{)", style="block"),
     _p("enum", r"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:const[ \t]+)?"

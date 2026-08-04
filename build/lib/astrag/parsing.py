@@ -117,25 +117,11 @@ class PythonStdlibParser:
         lines = source.splitlines()
         imports = self._imports(tree)
         chunks: list[CodeChunk] = []
-        def visit(nodes):
-            for node in nodes:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    chunks.append(self._function(node, rel_path, lines, imports, parent=None))
-                elif isinstance(node, ast.ClassDef):
-                    chunks.extend(self._class(node, rel_path, lines, imports))
-                # Recursively walk inside if/try/while/for blocks, ignoring nested functions/classes
-                elif hasattr(node, "body") and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    visit(node.body)
-                    if hasattr(node, "orelse"):
-                        visit(node.orelse)
-                    if hasattr(node, "finalbody"):
-                        visit(node.finalbody)
-                    if hasattr(node, "handlers"):
-                        for h in node.handlers:
-                            if hasattr(h, "body"):
-                                visit(h.body)
-
-        visit(tree.body)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                chunks.append(self._function(node, rel_path, lines, imports, parent=None))
+            elif isinstance(node, ast.ClassDef):
+                chunks.extend(self._class(node, rel_path, lines, imports))
         return chunks
 
     # ---- helpers ----

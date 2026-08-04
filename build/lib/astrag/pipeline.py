@@ -188,19 +188,30 @@ class CodebaseMemory:
                 except OSError:
                     report["skipped_unreadable"] += 1
                     continue
-                if looks_binary(source):
-                    report["skipped_binary"] += 1
-                    continue
                 if ext == ".py" and not prefer_tree_sitter:
+                    # stdlib ast is authoritative and perfectly safe on a
+                    # long embedded literal (base64 blobs, long URLs, ...)
+                    # -- don't let looks_binary()'s "one huge line" guard
+                    # throw out an otherwise 100% valid, parseable file.
                     file_chunks = py.parse_file(rel, source)
                 else:
                     lang = TreeSitterParser.EXT_LANG.get(ext)
                     ts = TreeSitterParser.for_language(lang) if lang else None
                     if ts is not None:
+                        # tree-sitter is a real incremental parser -- same
+                        # reasoning as above, trust it over a line-length
+                        # heuristic.
                         file_chunks = ts.parse_file(rel, source)
                     elif ext == ".py":
                         file_chunks = py.parse_file(rel, source)
                     else:
+                        # generic/heuristic engines (regex- or brace-
+                        # matching, not a real grammar) genuinely can
+                        # misbehave on minified/generated content, so the
+                        # cheap pre-filter earns its keep only here.
+                        if looks_binary(source):
+                            report["skipped_binary"] += 1
+                            continue
                         try:
                             file_chunks = parser_for(rel).parse_file(rel, source)
                         except Exception:

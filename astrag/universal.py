@@ -518,7 +518,7 @@ class MarkdownChunker:
 
 class YamlChunker:
     language = "yaml"
-    extensions = (".yml", ".yaml")
+    extensions = (".yml", ".yaml", ".cff")
     _KEY = re.compile(r"^(?P<name>[\w./-]+)[ \t]*:")
 
     def parse_file(self, rel_path: str, source: str) -> list[CodeChunk]:
